@@ -18,7 +18,7 @@ Companion extension: [Chrome Form Filler](https://chromewebstore.google.com/deta
 ### pip install (recommended)
 
 ```bash
-pip install git+https://github.com/PropDream/keystroke-sender.git
+pip install keystroke-sender
 ```
 
 Then register the Chrome native messaging host:
