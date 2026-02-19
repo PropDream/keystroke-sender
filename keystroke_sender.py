@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
 """
-Chrome Native Messaging host that simulates OS-level keystrokes.
+Chrome Native Messaging host that simulates OS-level keystrokes and mouse clicks.
 
-Receives JSON messages from a Chrome extension via stdin and types
-the specified text using pynput. Works on macOS, Linux, and Windows.
+Receives JSON messages from a Chrome extension via stdin and performs
+OS-level input simulation using pynput. Works on macOS, Linux, and Windows.
 
 Message protocol: 4-byte uint32 length prefix (native byte order) + UTF-8 JSON.
-Request:  {"text": "string to type"}
-Response: {"status": "ok", "typed": <count>} or {"status": "error", "message": "..."}
+
+Actions:
+  type:  {"action": "type", "text": "string to type", "delay": 0.05}
+         -> {"status": "ok", "typed": <count>}
+  click: {"action": "click", "x": 500, "y": 300}
+         -> {"status": "ok", "action": "click", "x": 500, "y": 300}
+
+Legacy (no action field): {"text": "..."} is treated as type action.
+Error response: {"status": "error", "message": "..."}
 """
 
 import sys
@@ -76,6 +83,22 @@ def type_text(text, delay=0.05):
     return count
 
 
+def click_at(x, y):
+    """
+    Simulate an OS-level left mouse click at the given screen coordinates.
+
+    Args:
+        x: Screen X coordinate (pixels from left edge).
+        y: Screen Y coordinate (pixels from top edge).
+    """
+    from pynput.mouse import Controller, Button
+
+    mouse = Controller()
+    mouse.position = (x, y)
+    time.sleep(0.05)  # brief pause after moving to ensure position is set
+    mouse.click(Button.left, 1)
+
+
 def main():
     log("Native messaging host started")
     log(f"Platform: {sys.platform}")
@@ -85,23 +108,49 @@ def main():
             message = read_message()
             log(f"Received: {message}")
 
-            text = message.get("text")
-            if text is None:
-                send_message({"status": "error", "message": "Missing 'text' field"})
-                continue
+            # Determine action: explicit "action" field, or default to "type" if "text" present
+            action = message.get("action")
+            if action is None:
+                if "text" in message:
+                    action = "type"
+                else:
+                    send_message({"status": "error", "message": "Missing 'action' field"})
+                    continue
 
-            if not isinstance(text, str):
-                send_message({"status": "error", "message": "'text' must be a string"})
-                continue
+            if action == "type":
+                text = message.get("text")
+                if text is None:
+                    send_message({"status": "error", "message": "Missing 'text' field"})
+                    continue
 
-            if len(text) == 0:
-                send_message({"status": "ok", "typed": 0})
-                continue
+                if not isinstance(text, str):
+                    send_message({"status": "error", "message": "'text' must be a string"})
+                    continue
 
-            delay = message.get("delay", 0.05)
-            typed = type_text(text, delay=delay)
-            log(f"Typed {typed} characters")
-            send_message({"status": "ok", "typed": typed})
+                if len(text) == 0:
+                    send_message({"status": "ok", "typed": 0})
+                    continue
+
+                delay = message.get("delay", 0.05)
+                typed = type_text(text, delay=delay)
+                log(f"Typed {typed} characters")
+                send_message({"status": "ok", "typed": typed})
+
+            elif action == "click":
+                x = message.get("x")
+                y = message.get("y")
+                if x is None or y is None:
+                    send_message({"status": "error", "message": "Missing 'x' or 'y' for click"})
+                    continue
+
+                x = int(x)
+                y = int(y)
+                click_at(x, y)
+                log(f"Clicked at ({x}, {y})")
+                send_message({"status": "ok", "action": "click", "x": x, "y": y})
+
+            else:
+                send_message({"status": "error", "message": f"Unknown action: {action}"})
 
         except json.JSONDecodeError as e:
             log(f"Invalid JSON: {e}")
