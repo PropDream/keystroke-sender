@@ -21,12 +21,20 @@ import sys
 import os
 import json
 import struct
+import threading
 import time
 
 # Ensure unbuffered stdout (critical for native messaging protocol)
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(write_through=True)
 os.environ["PYTHONUNBUFFERED"] = "1"
+
+# --- Safety limits ---
+MAX_MESSAGE_BYTES = 1_048_576  # 1 MB — reject anything larger
+MAX_TEXT_LENGTH = 10_000       # max characters per type action
+IDLE_TIMEOUT_SECONDS = 60      # exit after 1 min with no messages
+RATE_LIMIT_WINDOW = 1.0        # rolling window in seconds
+RATE_LIMIT_MAX = 100           # max actions per window
 
 
 def log(text):
@@ -36,7 +44,10 @@ def log(text):
 
 
 def read_message():
-    """Read a single native messaging message from stdin."""
+    """Read a single native messaging message from stdin.
+
+    Raises ValueError if the message exceeds MAX_MESSAGE_BYTES.
+    """
     raw_length = sys.stdin.buffer.read(4)
     if len(raw_length) == 0:
         # Chrome disconnected
@@ -45,6 +56,9 @@ def read_message():
         log(f"Expected 4 bytes for length, got {len(raw_length)}")
         sys.exit(1)
     message_length = struct.unpack("@I", raw_length)[0]
+    if message_length > MAX_MESSAGE_BYTES:
+        log(f"Message too large: {message_length} bytes (limit {MAX_MESSAGE_BYTES})")
+        raise ValueError(f"Message exceeds {MAX_MESSAGE_BYTES} byte limit")
     raw_message = sys.stdin.buffer.read(message_length)
     if len(raw_message) < message_length:
         log(f"Expected {message_length} bytes, got {len(raw_message)}")
@@ -99,14 +113,62 @@ def click_at(x, y):
     mouse.click(Button.left, 1)
 
 
+def _check_rate_limit(timestamps):
+    """Enforce a sliding-window rate limit. Returns True if the action is allowed."""
+    now = time.monotonic()
+    # Discard timestamps outside the window
+    while timestamps and timestamps[0] <= now - RATE_LIMIT_WINDOW:
+        timestamps.pop(0)
+    if len(timestamps) >= RATE_LIMIT_MAX:
+        return False
+    timestamps.append(now)
+    return True
+
+
+def _start_idle_watchdog(last_activity_ref):
+    """Background thread that exits the process after IDLE_TIMEOUT_SECONDS of inactivity."""
+    def watchdog():
+        while True:
+            elapsed = time.monotonic() - last_activity_ref[0]
+            remaining = IDLE_TIMEOUT_SECONDS - elapsed
+            if remaining <= 0:
+                log(f"Idle timeout ({IDLE_TIMEOUT_SECONDS}s) — exiting")
+                os._exit(0)  # hard exit from background thread
+            time.sleep(min(remaining, 10))
+    t = threading.Thread(target=watchdog, daemon=True)
+    t.start()
+
+
 def main():
     log("Native messaging host started")
     log(f"Platform: {sys.platform}")
+    log(f"Safety limits: idle_timeout={IDLE_TIMEOUT_SECONDS}s, "
+        f"rate_limit={RATE_LIMIT_MAX}/{RATE_LIMIT_WINDOW}s, "
+        f"max_text={MAX_TEXT_LENGTH}, max_msg={MAX_MESSAGE_BYTES}B")
+
+    action_timestamps = []  # for rate limiting
+    # Mutable ref so the watchdog thread can see updates
+    last_activity = [time.monotonic()]
+    _start_idle_watchdog(last_activity)
 
     while True:
         try:
             message = read_message()
+        except ValueError as e:
+            # Message size exceeded
+            send_message({"status": "error", "message": str(e)})
+            continue
+
+        last_activity[0] = time.monotonic()
+
+        try:
             log(f"Received: {message}")
+
+            # --- Rate limit ---
+            if not _check_rate_limit(action_timestamps):
+                log("Rate limit exceeded")
+                send_message({"status": "error", "message": f"Rate limit exceeded ({RATE_LIMIT_MAX} actions per {RATE_LIMIT_WINDOW}s)"})
+                continue
 
             # Determine action: explicit "action" field, or default to "type" if "text" present
             action = message.get("action")
@@ -125,6 +187,10 @@ def main():
 
                 if not isinstance(text, str):
                     send_message({"status": "error", "message": "'text' must be a string"})
+                    continue
+
+                if len(text) > MAX_TEXT_LENGTH:
+                    send_message({"status": "error", "message": f"Text too long ({len(text)} chars, limit {MAX_TEXT_LENGTH})"})
                     continue
 
                 if len(text) == 0:
