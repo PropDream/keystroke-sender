@@ -120,6 +120,27 @@ chmod +x uninstall.sh
 uninstall.bat
 ```
 
+## Security
+
+This app simulates real keystrokes and mouse clicks at the OS level, so it includes several safeguards to prevent misuse:
+
+**Chrome Native Messaging isolation** — The host process can *only* be launched by Chrome, and *only* the extension ID you registered in `allowed_origins` can send it messages. No network socket is opened; communication is purely via stdin/stdout. An unauthorized extension or external program cannot talk to it.
+
+**Idle timeout** — The host automatically exits after **5 minutes** of inactivity. It does not stay running indefinitely.
+
+**Rate limiting** — A maximum of **20 actions per second** is enforced. Bursts beyond this are rejected with an error response.
+
+**Input size limits** — Messages larger than **1 MB** are rejected before parsing. Text payloads longer than **10,000 characters** are rejected before typing.
+
+| Limit | Default |
+|---|---|
+| Idle timeout | 300 s (5 min) |
+| Rate limit | 20 actions / 1 s |
+| Max message size | 1 MB |
+| Max text length | 10,000 chars |
+
+These constants are defined at the top of `src/keystroke_sender/host.py` and can be adjusted if needed.
+
 ## Debugging
 
 - Launch Chrome from the terminal to see native host stderr output
