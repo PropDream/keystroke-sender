@@ -4,28 +4,49 @@ A Chrome Native Messaging host that simulates OS-level keystrokes. Receives text
 
 Works on **macOS**, **Linux**, and **Windows**.
 
+Companion extension: [Chrome Form Filler](https://chromewebstore.google.com/detail/chrome-form-filler/dpdolkkncejkelemckjmjoaefmgdhepj) (`dpdolkkncejkelemckjmjoaefmgdhepj`)
+
 ## Prerequisites
 
 - Python 3.7+
 - pip
 - Google Chrome
+- [Chrome Form Filler](https://chromewebstore.google.com/detail/chrome-form-filler/dpdolkkncejkelemckjmjoaefmgdhepj) extension
 
 ## Installation
 
-### macOS / Linux
+### pip install (recommended)
+
+```bash
+pip install git+https://github.com/PropDream/keystroke-sender.git
+```
+
+Then register the Chrome native messaging host:
+
+```bash
+keystroke-sender-register YOUR_EXTENSION_ID
+```
+
+To unregister later:
+
+```bash
+keystroke-sender-register --unregister
+```
+
+### Manual install (macOS / Linux)
 
 ```bash
 chmod +x install.sh
 ./install.sh
 ```
 
-### Windows
+### Manual install (Windows)
 
 ```cmd
 install.bat
 ```
 
-The installer will:
+The manual installer will:
 1. Prompt you for your Chrome extension ID (find it at `chrome://extensions`)
 2. Create the native messaging host manifest in the correct OS location
 3. Install the `pynput` Python dependency
