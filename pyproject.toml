@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "keystroke-sender"
+version = "0.1.0"
+description = "Chrome Native Messaging host that simulates OS-level keystrokes and mouse clicks"
+readme = "README.md"
+requires-python = ">=3.7"
+license = "MIT"
+dependencies = ["pynput"]
+
+[project.scripts]
+keystroke-sender = "keystroke_sender.host:main"
+keystroke-sender-register = "keystroke_sender.register:main"
+
+[project.urls]
+Repository = "https://github.com/PropDream/keystroke-sender"
