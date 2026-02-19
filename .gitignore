@@ -8,3 +8,4 @@ keystroke_sender_wrapper.bat
 dist/
 build/
 *.egg-info/
+nul
