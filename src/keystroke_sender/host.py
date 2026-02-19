@@ -32,9 +32,9 @@ os.environ["PYTHONUNBUFFERED"] = "1"
 # --- Safety limits ---
 MAX_MESSAGE_BYTES = 1_048_576  # 1 MB — reject anything larger
 MAX_TEXT_LENGTH = 10_000       # max characters per type action
-IDLE_TIMEOUT_SECONDS = 300     # exit after 5 min with no messages
+IDLE_TIMEOUT_SECONDS = 60      # exit after 1 min with no messages
 RATE_LIMIT_WINDOW = 1.0        # rolling window in seconds
-RATE_LIMIT_MAX = 20            # max actions per window
+RATE_LIMIT_MAX = 100           # max actions per window
 
 
 def log(text):
