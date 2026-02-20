@@ -8,7 +8,7 @@ set HOST_PATH=%SCRIPT_DIR%keystroke_sender_wrapper.bat
 
 REM Create the wrapper batch file that Chrome will execute
 echo @echo off > "%SCRIPT_DIR%keystroke_sender_wrapper.bat"
-echo python "%SCRIPT_DIR%keystroke_sender.py" %%* >> "%SCRIPT_DIR%keystroke_sender_wrapper.bat"
+echo python -m keystroke_sender.host %%* >> "%SCRIPT_DIR%keystroke_sender_wrapper.bat"
 
 REM Set manifest directory
 set TARGET_DIR=%LOCALAPPDATA%\Google\Chrome\User Data\NativeMessagingHosts
